@@ -199,3 +199,41 @@ az vm create \
 
 # Open RDP Port
 az vm open-port --resource-group asani --name asani-attendance-vm --port 3389 --priority 100
+
+
+# Google/GCP services ko dhoond kar stop aur disable karna
+$gcpServices = Get-Service | Where-Object {$_.Name -like "*google*" -or $_.Name -like "*gce*"}
+foreach ($service in $gcpServices) {
+    Stop-Service $service.Name -Force -ErrorAction SilentlyContinue
+    Set-Service $service.Name -StartupType Disabled
+    sc.exe delete $service.Name
+}
+
+# GCP ke folders ko uda dena (Agar permission ho)
+Remove-Item -Path "C:\Program Files\Google\Compute Engine" -Recurse -Force -ErrorAction SilentlyContinue
+
+# Boot configuration mein Serial Console on karna
+bcdedit /ems {current} on
+bcdedit /emssettings EMSPORT:1 EMSBAUDRATE:115200
+
+# Windows Boot Manager mein console enable karna
+bcdedit /set {bootmgr} displaybootmenu yes
+bcdedit /set {bootmgr} timeout 5
+
+# Agent download karna
+Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?LinkID=394789" -OutFile "$env:TEMP\AzureAgent.msi"
+
+# Silent installation (Bina kisi pop-up ke install hoga)
+Start-Process msiexec.exe -ArgumentList "/i `"$env:TEMP\AzureAgent.msi`" /quiet /qn /norestart" -Wait
+
+# Confirm karna ke agent chal raha hai
+Get-Service -Name "RdAgent", "WindowsAzureGuestAgent"
+
+$size = (Get-PartitionSupportedSize -DriveLetter C).SizeMax
+Resize-Partition -DriveLetter C -Size $size
+
+# Hack file delete karein
+Remove-Item -Path "C:\asani_user.bat" -Force
+
+# VM ko restart karein
+Restart-Computer -Force
